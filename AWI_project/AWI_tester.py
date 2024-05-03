@@ -11,14 +11,20 @@ Start off by filling in your area of interest, this much be a ceremonial county 
 aoi = "Wiltshire" ## Will come back to make this validating based on a the unique values available in counties
 ##Loading packages for interactive figures
 import os
+import pandas as pd
 import geopandas as gpd
 import shapely
 from shapely.geometry import Polygon
+from shapely.geometry import box
 import rasterio as rio
+from rasterio.windows import Window
 import rasterio.merge
 import numpy as np
 import matplotlib.pyplot as plt
 import earthaccess
+import rasterstats
+import shapely.geometry
+from rasterstats import zonal_stats
 
 ##Importing counties shapefile to act as location framework
 counties = gpd.read_file('Data/gb_counties.shp')
@@ -102,7 +108,7 @@ print(awi_url) ## Used to check the URL works, paste it into a browser
 
 ##Importing the AWI dataset from the natural england data portal through their API
 awi = gpd.read_file(awi_url)
-print(len(awi))
+print(f'Number of Ancient Woodlands withing {aoi}: {len(awi)}')
 print(awi.loc[0])
 
 #Checking if the crs is correct with the crs_check function
@@ -114,7 +120,9 @@ awi_clipped = gpd.clip(awi, study_area)
 print(len(awi_clipped))
 
 
-''' This next section will 
+''' This next section will load in Global Vegetation Height Metrics from GEDI and ICESat2 and calculate zonal statistics
+    to get an idea of vegetation height in the ancient woodlands
+    Low average vegetation height will highlight priority woodlands for further analysis
 '''
 study_area_wgs84 = study_area.to_crs(epsg=4326)
 
@@ -124,13 +132,12 @@ search_area_bounds = search_area_geo.bounds
 print("Bounding Box:", search_area_bounds)
 
 search_area_list = list(search_area_bounds)
-search_area_tuple = tuple(search_area_list)
-#search_area = shapely.geometry.polygon.orient(search_area, sign=1) # Changing the order of the AWI verticies for the earth access
+search_area_tuple = tuple(search_area_list) #converting to a tuple because that is what earth access is needing
 
-print(type(study_area_wgs84))
-print(type(search_area_geo))
-print(search_area_list)
-print(search_area_tuple)
+#print(type(study_area_wgs84))
+#print(type(search_area_geo))
+#print(search_area_list)
+#print(search_area_tuple)
 
 #Earth access login
 earthaccess.login(strategy='netrc')
@@ -195,5 +202,104 @@ print(f"Datasets to download: {len(download_list)}")
 
 #Download the files not already in the directory
 downloaded_files = earthaccess.download(download_list, ds_name)
+
+
+
+##Zonal stats
+# Open the gedi rh98 100m tif
+with rasterio.open('GEDI_ICESAT2_Global_Veg_Height_2294/gedi_rh98_100m.tif') as veg_dataset:
+    # Get the crs and transformation
+    crs = veg_dataset.crs
+    affine_tfm = veg_dataset.transform
+    nodata_value = veg_dataset.nodata
+    print("Nodata value:", nodata_value)
+    bounds = veg_dataset.bounds
+    print(f"Raster data bounds: {bounds}")
+
+    # Change the awi dataset to the crs of the gedi raster
+    awi_clipped = awi_clipped.to_crs(crs)
+    # setting the index as the object ID
+    awi_clipped.set_index('OBJECTID', inplace=True)
+
+    # create tile size
+    tile_width = 100
+    tile_height = 100
+
+    # Get the bounds of the study area for which we need the tiles for
+    xmin, ymin, xmax, ymax = awi_clipped.total_bounds
+
+    # List to store zonal statistics results
+    awi_stats_results = []
+
+    # Iterate over tiles within the study area
+    for tile_x in range(int(bounds.left), int(bounds.right), tile_width):
+        for tile_y in range(int(bounds.bottom), int(bounds.top), tile_height):
+
+            # Define the bounds for the current tile
+            tile_bounds = (tile_x, tile_y, tile_x + tile_width, tile_y + tile_height)
+
+            # This creates a polygon bounding box out of the tile bounds
+            tile_polygon = box(*tile_bounds) # * unpacks tile bounds into the four arguments
+
+            # This is optional if you need to check the tile_polygon
+            #tile_gdf = gpd.GeoDataFrame({'geometry': [tile_polygon]}, crs='EPSG:4326')
+            #tile_gdf.to_file('Data/tile_polygon.shp')
+
+            # Checking if the tile bbox overlaps with the awi clipped bbox
+            if awi_clipped.intersects(tile_polygon).any():
+                # This then defines the window
+                window = Window(tile_x, tile_y, tile_width, tile_height)
+                print(window)
+
+                # Read the gedi raster in that window
+                tile_data = veg_dataset.read(1, window=window)
+
+                #print("Tile data type:",type(tile_data))
+                print("Tile data shape:", tile_data.shape)
+                print("Tile data sample:", tile_data[0, :10])  # Printing a sample of the data array
+
+                # Clip the tile data to the study area and perform zonal statistics
+                for object_id, woodland in awi_clipped.iterrows():
+                    ##Check if the polygon intersects with the tile polygon
+                    if woodland.geometry.intersects(tile_polygon):
+                        # Perform zonal statistics for the polygon
+                        stats = zonal_stats(
+                            [woodland.geometry],
+                            tile_data,
+                            affine=affine_tfm,
+                            stats='mean',
+                            nodata=nodata_value
+                        )
+                        # Access the NAME columns from awi_clipped
+                        name = woodland['NAME']
+
+
+
+                        # Create a dictionary with the zonal statistics and OBJECTID and NAME
+                        result = {
+                            'OBJECTID': object_id,
+                            'NAME': name,
+                            'mean': stats[0]['mean'],
+
+                        }
+
+                        # Append the result to the list of zonal statistics results
+                        awi_stats_results.append(result)
+
+                   # Optionally print the stats results
+                    #print(awi_stats_results)
+
+
+##Convert the results to a dataframe
+awi_stats_df = pd.DataFrame(awi_stats_results)
+##Export to CSV
+awi_stats_df.to_csv('Data/awi_stats_results.csv', index=False)
+
+
+
+
+
+
+
 
 

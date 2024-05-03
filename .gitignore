@@ -163,3 +163,14 @@ AWI_project/GEDI_ICESAT2_Global_Veg_Height_2294/gedi_rh98_100m.tif.sha256
 AWI_project/GEDI_ICESAT2_Global_Veg_Height_2294/icesat2_rh98_100m.tif
 AWI_project/GEDI_ICESAT2_Global_Veg_Height_2294/icesat2_rh98_100m.tif.sha256
 /AWI_project/GEDI_ICESAT2_Global_Veg_Height_2294
+AWI_project/Data/awi_clipped.cpg
+AWI_project/Data/awi_clipped.dbf
+AWI_project/Data/awi_clipped.prj
+AWI_project/Data/awi_clipped.shp
+AWI_project/Data/awi_clipped.shx
+AWI_project/Data/awi_stats_results.csv
+AWI_project/Data/tile_polygon.cpg
+AWI_project/Data/tile_polygon.dbf
+AWI_project/Data/tile_polygon.prj
+AWI_project/Data/tile_polygon.shp
+AWI_project/Data/tile_polygon.shx
