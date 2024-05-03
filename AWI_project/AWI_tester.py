@@ -8,7 +8,11 @@ is likely to still be present based on LIDAR and/or Radar assessments of vegetat
 
 Start off by filling in your area of interest, this much be a ceremonial county of England
 """
-aoi = "Wiltshire" ## Will come back to make this validating based on a the unique values available in counties
+aoi = "Wiltshire"
+
+
+
+
 ##Loading packages for interactive figures
 import os
 import pandas as pd
@@ -20,7 +24,6 @@ import rasterio as rio
 from rasterio.windows import Window
 import rasterio.merge
 import numpy as np
-import matplotlib.pyplot as plt
 import earthaccess
 import rasterstats
 import shapely.geometry
@@ -29,8 +32,8 @@ from rasterstats import zonal_stats
 ##Importing counties shapefile to act as location framework
 counties = gpd.read_file('Data/gb_counties.shp')
 #print(counties.head(5)) #check head
-print(len(counties)) # Check length should be 91
-print(counties.crs)# check crs should be EPSG:27700
+print(f'Number of counties in dataset: {len(counties)}') # Check length should be 91
+print(f'CRS of Counties dataset: {counties.crs}')# check crs should be EPSG:27700
 pcrs = 'EPSG:27700' ## Defining project CRS
 #print(counties.columns)
 
@@ -60,7 +63,8 @@ def crs_check(shape, pcrs):
 
 study_area = crs_check(study_area,pcrs) # double checking that nothing weird has happened when getting the study area and
                             # testing the function
-print(study_area)
+
+
 # Calculates the area of the county
 study_area_ha = (study_area.area)/10000
 
@@ -85,7 +89,7 @@ Query URL from NE API explorer - https://naturalengland-defra.opendata.arcgis.co
 #Making the above a function as it will be needed multiple times
 def get_api_bb(study_area):
     """
-    This gets the bounding box of the study area and converts ot to EPSG:4326 in order to return decimal
+    This gets the bounding box of the study area and converts it to EPSG:4326 in order to return decimal
     degrees for the x&y min&max which is required for defining the area we are requesting data from the API,
     this limits the amount of data we need to call and lowers processing time.
 
@@ -98,27 +102,28 @@ def get_api_bb(study_area):
     xmin, ymin, xmax, ymax = study_area_wgs84.total_bounds  # Get the bounding box
     return f"{xmin:.3f},{ymin:.3f},{xmax:.3f},{ymax:.3f}"
 
+
+#Use the function defined above to get he bounding box of the study area and converted to EPSG:4326
 awi_bb = get_api_bb(study_area)
-print(awi_bb)
+
 # Creating the API request URL with the bounding box parameters
 #awi_url = f"https://services.arcgis.com/JJzESW51TqeY9uat/arcgis/rest/services/Ancient_Woodland_England/FeatureServer/0/query?where=1%3D1&outFields=*&geometry={xmin_formatted},{ymin_formatted},{xmax_formatted},{ymax_formatted}&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outSR=4326&f=json"
 awi_url = f"https://services.arcgis.com/JJzESW51TqeY9uat/arcgis/rest/services/Ancient_Woodland_England/FeatureServer/0/query?where=1%3D1&outFields=*&geometry={awi_bb}&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outSR=4326&f=json"
 
-print(awi_url) ## Used to check the URL works, paste it into a browser
+print(f'Check this URL by pasting into a browser search bar:{awi_url}') ## Used to check the URL works, paste it into a browser
 
 ##Importing the AWI dataset from the natural england data portal through their API
 awi = gpd.read_file(awi_url)
-print(f'Number of Ancient Woodlands withing {aoi}: {len(awi)}')
+
 print(awi.loc[0])
 
 #Checking if the crs is correct with the crs_check function
 awi= crs_check(awi, pcrs)
-print(awi.crs)
+#print(awi.crs)
 
 #Clipping awi to user defined study area
 awi_clipped = gpd.clip(awi, study_area)
-print(len(awi_clipped))
-
+print(f'Number of Ancient Woodlands within {aoi}: {len(awi_clipped)}')
 
 ''' This next section will load in Global Vegetation Height Metrics from GEDI and ICESat2 and calculate zonal statistics
     to get an idea of vegetation height in the ancient woodlands
@@ -129,7 +134,7 @@ study_area_wgs84 = study_area.to_crs(epsg=4326)
 search_area_geo = study_area_wgs84['geometry'].iloc[0]
 
 search_area_bounds = search_area_geo.bounds
-print("Bounding Box:", search_area_bounds)
+print("Search area bounding box:", search_area_bounds)
 
 search_area_list = list(search_area_bounds)
 search_area_tuple = tuple(search_area_list) #converting to a tuple because that is what earth access is needing
@@ -270,12 +275,9 @@ with rasterio.open('GEDI_ICESAT2_Global_Veg_Height_2294/gedi_rh98_100m.tif') as 
                             stats='mean',
                             nodata=nodata_value
                         )
-                        # Access the NAME columns from awi_clipped
+                        # get the NAME column from awi_clipped
                         name = woodland['NAME']
-
-
-
-                        # Create a dictionary with the zonal statistics and OBJECTID and NAME
+                        # Create a dictionary with the zonal statistics, OBJECTID and NAME
                         result = {
                             'OBJECTID': object_id,
                             'NAME': name,

@@ -4,10 +4,11 @@ channels:
   - defaults
 dependencies:
   - python>3.5
+  - pandas
   - geopandas
-  - matplotlib
-  - cartopy
-  - notebook
+  - shapely
+  - rasterstats
   - rasterio
-  - pyepsg
-  - folium
+  - earthaccess
+  - numpy
+ 
