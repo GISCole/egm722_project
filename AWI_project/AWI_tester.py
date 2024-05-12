@@ -12,8 +12,7 @@ aoi = "Wiltshire"
 
 
 
-
-##Loading packages for interactive figures
+##Import Packages
 import os
 import pandas as pd
 import geopandas as gpd
@@ -34,7 +33,7 @@ counties = gpd.read_file('Data/gb_counties.shp')
 #print(counties.head(5)) #check head
 print(f'Number of counties in dataset: {len(counties)}') # Check length should be 91
 print(f'CRS of Counties dataset: {counties.crs}')# check crs should be EPSG:27700
-pcrs = 'EPSG:27700' ## Defining project CRS
+pcrs = counties.crs ## Defining project CRS
 #print(counties.columns)
 
 # Identify the Area of Interest region and assign it as the study area from the counties shapefile
@@ -94,7 +93,7 @@ def get_api_bb(study_area):
     this limits the amount of data we need to call and lowers processing time.
 
     Args:
-   study_area: geodataframe dervived from counties database and uner area of interest (aoi)
+   study_area: geodataframe dervived from counties database and user defined area of interest (aoi)
     Returns: xmin, ymin, xmax, ymax in decimal degrees to 3 decimal places
 
     """
@@ -123,6 +122,7 @@ awi= crs_check(awi, pcrs)
 
 #Clipping awi to user defined study area
 awi_clipped = gpd.clip(awi, study_area)
+awi_clipped.to_file('Data/awi_clipped.shp')
 print(f'Number of Ancient Woodlands within {aoi}: {len(awi_clipped)}')
 
 ''' This next section will load in Global Vegetation Height Metrics from GEDI and ICESat2 and calculate zonal statistics
@@ -213,7 +213,7 @@ downloaded_files = earthaccess.download(download_list, ds_name)
 ##Zonal stats
 
 # Open the gedi rh98 100m tif
-with rasterio.open('GEDI_ICESAT2_Global_Veg_Height_2294/gedi_rh98_100m.tif') as veg_dataset:
+with rio.open('GEDI_ICESAT2_Global_Veg_Height_2294/gedi_rh98_100m.tif') as veg_dataset:
     # Get the crs and transformation
     crs = veg_dataset.crs
     affine_tfm = veg_dataset.transform

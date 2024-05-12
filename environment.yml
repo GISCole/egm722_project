@@ -4,6 +4,7 @@ channels:
   - defaults
 dependencies:
   - python>3.5
+  - os
   - pandas
   - geopandas
   - shapely
