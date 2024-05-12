@@ -211,6 +211,7 @@ downloaded_files = earthaccess.download(download_list, ds_name)
 
 
 ##Zonal stats
+
 # Open the gedi rh98 100m tif
 with rasterio.open('GEDI_ICESAT2_Global_Veg_Height_2294/gedi_rh98_100m.tif') as veg_dataset:
     # Get the crs and transformation
@@ -221,14 +222,19 @@ with rasterio.open('GEDI_ICESAT2_Global_Veg_Height_2294/gedi_rh98_100m.tif') as 
     bounds = veg_dataset.bounds
     print(f"Raster data bounds: {bounds}")
 
+
     # Change the awi dataset to the crs of the gedi raster
     awi_clipped = awi_clipped.to_crs(crs)
     # setting the index as the object ID
     awi_clipped.set_index('OBJECTID', inplace=True)
 
     # create tile size
-    tile_width = 100
-    tile_height = 100
+    window_width = 1000
+    window_height = 1000
+
+    # Defining raster dimensions
+    raster_width = veg_dataset.width
+    raster_height = veg_dataset.height
 
     # Get the bounds of the study area for which we need the tiles for
     xmin, ymin, xmax, ymax = awi_clipped.total_bounds
@@ -237,60 +243,39 @@ with rasterio.open('GEDI_ICESAT2_Global_Veg_Height_2294/gedi_rh98_100m.tif') as 
     awi_stats_results = []
 
     # Iterate over tiles within the study area
-    for tile_x in range(int(bounds.left), int(bounds.right), tile_width):
-        for tile_y in range(int(bounds.bottom), int(bounds.top), tile_height):
+    for row in range(0, raster_height, window_height):
+        for col in range(0, raster_width, window_width):
+            win = Window(col, row, window_width, window_height)
 
-            # Define the bounds for the current tile
-            tile_bounds = (tile_x, tile_y, tile_x + tile_width, tile_y + tile_height)
+            ## Read the gedi raster in that window
+            veg_raster = veg_dataset.read(1, window=win)
 
-            # This creates a polygon bounding box out of the tile bounds
-            tile_polygon = box(*tile_bounds) # * unpacks tile bounds into the four arguments
+            # Clip the tile data to the study area and perform zonal statistics
+            for object_id, woodland in awi_clipped.iterrows():
+                # Check if the polygon intersects with the tile bounds
+                if woodland.geometry.intersects(window_bounds):
+                    # Perform zonal statistics for the polygon
+                    stats = zonal_stats(
+                        [woodland.geometry],
+                        veg_raster,
+                        affine=affine_tfm,
+                        stats='mean',
+                        nodata=nodata_value
+                    )
+                    # get the NAME column from awi_clipped
+                    name = woodland['NAME']
+                    # Create a dictionary with the zonal statistics, OBJECTID, and NAME
+                    result = {
+                        'OBJECTID': object_id,
+                        'NAME': name,
+                        'mean': stats[0]['mean'],
+                    }
 
-            # This is optional if you need to check the tile_polygon
-            #tile_gdf = gpd.GeoDataFrame({'geometry': [tile_polygon]}, crs='EPSG:4326')
-            #tile_gdf.to_file('Data/tile_polygon.shp')
+                    # Append the result to the list of zonal statistics results
+                    awi_stats_results.append(result)
 
-            # Checking if the tile bbox overlaps with the awi clipped bbox
-            if awi_clipped.intersects(tile_polygon).any():
-                # This then defines the window
-                window = Window(tile_x, tile_y, tile_width, tile_height)
-                print(window)
-
-                # Read the gedi raster in that window
-                tile_data = veg_dataset.read(1, window=window)
-
-                #print("Tile data type:",type(tile_data))
-                print("Tile data shape:", tile_data.shape)
-                print("Tile data sample:", tile_data[0, :10])  # Printing a sample of the data array
-
-                # Clip the tile data to the study area and perform zonal statistics
-                for object_id, woodland in awi_clipped.iterrows():
-                    ##Check if the polygon intersects with the tile polygon
-                    if woodland.geometry.intersects(tile_polygon):
-                        # Perform zonal statistics for the polygon
-                        stats = zonal_stats(
-                            [woodland.geometry],
-                            tile_data,
-                            affine=affine_tfm,
-                            stats='mean',
-                            nodata=nodata_value
-                        )
-                        # get the NAME column from awi_clipped
-                        name = woodland['NAME']
-                        # Create a dictionary with the zonal statistics, OBJECTID and NAME
-                        result = {
-                            'OBJECTID': object_id,
-                            'NAME': name,
-                            'mean': stats[0]['mean'],
-
-                        }
-
-                        # Append the result to the list of zonal statistics results
-                        awi_stats_results.append(result)
-
-                   # Optionally print the stats results
-                    #print(awi_stats_results)
-
+                # Optionally print the stats results
+                # print(awi_stats_results)
 
 ##Convert the results to a dataframe
 awi_stats_df = pd.DataFrame(awi_stats_results)
